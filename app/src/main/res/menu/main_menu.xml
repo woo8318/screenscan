@@ -19,4 +19,8 @@
         android:checkable="true"
         android:title="@string/strip_line_numbers"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/action_check_update"
+        android:title="@string/check_update"
+        app:showAsAction="never" />
 </menu>

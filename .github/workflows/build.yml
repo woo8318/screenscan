@@ -29,6 +29,14 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Resolve app version from tag
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "APP_VERSION=0.0.0-dev" >> "$GITHUB_ENV"
+          fi
+
       - name: Unit tests
         run: gradle --no-daemon testDebugUnitTest
 

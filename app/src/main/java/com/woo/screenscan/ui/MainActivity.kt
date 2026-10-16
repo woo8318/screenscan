@@ -20,13 +20,17 @@ import com.woo.screenscan.camera.CameraBinder
 import com.woo.screenscan.camera.OcrLanguage
 import com.woo.screenscan.camera.TextAnalyzer
 import com.woo.screenscan.databinding.ActivityMainBinding
+import com.woo.screenscan.update.UpdateViewModel
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var cameraBinder: CameraBinder
     private lateinit var exporter: TextExporter
+    private lateinit var updatePrompter: UpdatePrompter
     private val viewModel: MainViewModel by viewModels()
+    private val updateViewModel: UpdateViewModel by viewModels()
+    private var updateMessage: String? = null
 
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startCamera() else toast(R.string.camera_permission_denied)
@@ -44,12 +48,17 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         exporter = TextExporter(this)
         cameraBinder = CameraBinder(this, binding.preview, viewModel.analysisExecutor)
+        updatePrompter = UpdatePrompter(this, updateViewModel) { message ->
+            updateMessage = message
+            updateStatus()
+        }
 
         applySystemBarInsets()
         bindButtons()
         bindGestures()
         observeViewModel()
         ensureCameraPermission()
+        updateViewModel.checkOnLaunch(UpdatePrompter.installedVersion(this))
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -69,7 +78,13 @@ class MainActivity : AppCompatActivity() {
         R.id.action_save -> withText { createDocument.launch(getString(R.string.default_file_name)) }
         R.id.action_engine_korean -> toggleLanguage()
         R.id.action_strip_line_numbers -> toggleSetting { it.copy(stripLineNumbers = !it.stripLineNumbers) }
+        R.id.action_check_update -> checkForUpdate()
         else -> super.onOptionsItemSelected(item)
+    }
+
+    private fun checkForUpdate(): Boolean {
+        updateViewModel.check(UpdatePrompter.installedVersion(this), silent = false)
+        return true
     }
 
     private fun applySystemBarInsets() {
@@ -146,14 +161,21 @@ class MainActivity : AppCompatActivity() {
             invalidateOptionsMenu()
         }
         viewModel.lastFrame.observe(this) { frame -> binding.overlay.update(frame) }
+        updateViewModel.state.observe(this) { state -> updatePrompter.render(state) }
     }
 
     private fun updateStatus() {
+        val pending = updateMessage
+        if (pending != null) {
+            binding.status.text = pending
+            return
+        }
         val settings = viewModel.currentSettings
         val lineCount = viewModel.state.value?.lines?.size ?: 0
         val mode = getString(if (settings.autoMode) R.string.status_auto else R.string.status_manual)
         val running = getString(if (settings.paused) R.string.status_paused else R.string.status_running)
-        binding.status.text = getString(R.string.status_format, lineCount, mode, running)
+        val version = UpdatePrompter.installedVersion(this)
+        binding.status.text = getString(R.string.status_format, lineCount, mode, running, version)
     }
 
     private fun togglePause() {

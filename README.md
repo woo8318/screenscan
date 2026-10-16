@@ -20,12 +20,18 @@
 메뉴에서 한국어 엔진(한글 포함)과 Latin 엔진(영문 코드에 유리)을 바꿀 수 있고,
 편집기 줄번호가 함께 잡히면 "줄번호 제거"를 켭니다.
 
+## 업데이트
+
+앱을 켜면 GitHub Releases 의 최신 태그와 설치된 버전을 비교해 새 버전이 있으면 알림을 띄웁니다.
+"업데이트"를 누르면 APK 를 받아 바로 설치 화면으로 넘어갑니다. 메뉴의 "업데이트 확인"으로 수동 확인도 됩니다.
+`main` 브랜치 빌드(0.0.0-dev)는 자동 확인을 하지 않습니다.
+
 ## 빌드
 
 로컬 툴체인 없이 GitHub Actions 로 빌드합니다.
 
-- `main` 에 푸시하면 디버그 APK 가 workflow artifact 로 올라갑니다.
-- `v*` 태그를 푸시하면 GitHub Release 에 APK 가 첨부됩니다.
+- `main` 에 푸시하면 디버그 APK 가 workflow artifact 로 올라갑니다 (버전 0.0.0-dev).
+- `v*` 태그를 푸시하면 태그가 versionName 이 되고 GitHub Release 에 APK 가 첨부됩니다.
 
 ```bash
 git tag v0.1.0

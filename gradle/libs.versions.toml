@@ -10,6 +10,7 @@ camerax = "1.4.1"
 mlkitText = "16.0.1"
 coroutines = "1.9.0"
 junit = "4.13.2"
+json = "20240303"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -26,6 +27,7 @@ mlkit-text-latin = { group = "com.google.mlkit", name = "text-recognition", vers
 mlkit-text-korean = { group = "com.google.mlkit", name = "text-recognition-korean", version.ref = "mlkitText" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+json = { group = "org.json", name = "json", version.ref = "json" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
