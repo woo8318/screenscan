@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ScreenScan</string>
+    <string name="auto_mode">자동</string>
+    <string name="capture">캡처</string>
+    <string name="pause">일시정지</string>
+    <string name="resume">재개</string>
+    <string name="undo">실행취소</string>
+    <string name="copy">복사</string>
+    <string name="clear">지우기</string>
+    <string name="share">공유</string>
+    <string name="save_file">파일로 저장</string>
+    <string name="engine_korean">한국어 엔진</string>
+    <string name="strip_line_numbers">줄번호 제거</string>
+    <string name="output_hint">카메라를 화면에 비추고 스크롤하면 새 줄이 여기에 쌓입니다.</string>
+    <string name="status_format">%1$d줄 · %2$s · %3$s</string>
+    <string name="status_auto">자동</string>
+    <string name="status_manual">수동</string>
+    <string name="status_paused">일시정지</string>
+    <string name="status_running">인식 중</string>
+    <string name="copied">클립보드에 복사했습니다</string>
+    <string name="saved">파일로 저장했습니다</string>
+    <string name="save_failed">파일 저장에 실패했습니다</string>
+    <string name="nothing_to_export">저장할 텍스트가 없습니다</string>
+    <string name="camera_permission_denied">카메라 권한이 없으면 사용할 수 없습니다</string>
+    <string name="default_file_name">screenscan.txt</string>
+</resources>
