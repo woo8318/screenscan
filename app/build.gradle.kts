@@ -25,11 +25,27 @@ android {
         versionName = appVersion
     }
 
+    // CI provides a persistent keystore so every release carries the same signature and
+    // installs as an upgrade. Without it (local or fork builds) the default debug key is used.
+    val keystorePath = System.getenv("SIGNING_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+    val persistentSigning = keystorePath?.let { path ->
+        signingConfigs.create("persistent") {
+            storeFile = file(path)
+            storePassword = System.getenv("SIGNING_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+            keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
+        debug {
+            persistentSigning?.let { signingConfig = it }
+        }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Keep the release build unobfuscated for now; the APK size is dominated by OCR models.
+            isMinifyEnabled = false
+            isShrinkResources = false
+            persistentSigning?.let { signingConfig = it }
         }
     }
 

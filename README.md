@@ -33,8 +33,10 @@
 
 로컬 툴체인 없이 GitHub Actions 로 빌드합니다.
 
-- `main` 에 푸시하면 디버그 APK 가 workflow artifact 로 올라갑니다 (버전 0.0.0-dev).
+- `main` 에 푸시하면 APK 가 workflow artifact 로 올라갑니다 (버전 0.0.0-dev).
 - `v*` 태그를 푸시하면 태그가 versionName 이 되고 GitHub Release 에 APK 가 첨부됩니다.
+- 서명은 GitHub Secrets 의 고정 키스토어(`SIGNING_KEYSTORE_BASE64` 등)로 합니다. 키가 바뀌면
+  기존 설치 위에 업데이트가 안 되므로 키스토어 원본은 반드시 백업해 두세요.
 
 ```bash
 git tag v0.1.0
