@@ -18,5 +18,5 @@ object CharCells {
 
     fun isWide(ch: Char): Boolean = wideRanges.any { ch.code in it }
 
-    fun count(text: String): Int = text.sumOf { if (isWide(it)) 2 else 1 }
+    fun count(text: String): Int = text.length + text.count(::isWide)
 }
