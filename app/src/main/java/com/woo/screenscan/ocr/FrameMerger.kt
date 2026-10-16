@@ -9,6 +9,7 @@ object FrameMerger {
     private const val MIN_MATCH_RATIO = 0.6f
     private const val MIN_MATCHES = 2
     private const val MIN_SINGLE_MATCH_LENGTH = 6
+    private const val MIN_MATCHED_LENGTH = 6
     private const val SEARCH_WINDOW_FACTOR = 3
 
     data class Alignment(
@@ -58,14 +59,18 @@ object FrameMerger {
         }
         val matches = matched.size
         if (matches.toFloat() / comparable.size < MIN_MATCH_RATIO) return null
-        if (matches < MIN_MATCHES && !singleMatchIsStrong(matched, normIncoming)) return null
+        if (!matchesAreStrong(matched, normIncoming)) return null
         val deltas = matched.map { (i, j) -> existing[base + j].indent - incoming[i].indent }.sorted()
         val indentDelta = if (deltas.isEmpty()) 0 else deltas[deltas.size / 2]
         return Alignment(base + offset, overlap, matches, indentDelta)
     }
 
-    private fun singleMatchIsStrong(matched: List<Pair<Int, Int>>, normIncoming: List<String>): Boolean =
-        matched.size == 1 && normIncoming[matched.single().first].length >= MIN_SINGLE_MATCH_LENGTH
+    /** Generic one-character lines such as braces must not anchor an alignment on their own. */
+    private fun matchesAreStrong(matched: List<Pair<Int, Int>>, normIncoming: List<String>): Boolean {
+        val matchedLength = matched.sumOf { (i, _) -> normIncoming[i].length }
+        if (matchedLength < MIN_MATCHED_LENGTH) return false
+        return matched.size >= MIN_MATCHES || normIncoming[matched.single().first].length >= MIN_SINGLE_MATCH_LENGTH
+    }
 
     private fun trimBlankEdges(lines: List<TextLine>): List<TextLine> =
         lines.dropWhile { it.isBlank }.dropLastWhile { it.isBlank }

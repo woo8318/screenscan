@@ -26,7 +26,7 @@ class TextExporter(private val context: Context) {
 
     /** Writes [text] to [uri]; returns false when the write fails. */
     fun save(uri: Uri, text: String): Boolean = try {
-        context.contentResolver.openOutputStream(uri, "wt")?.use { stream ->
+        context.contentResolver.openOutputStream(uri, "w")?.use { stream ->
             stream.write(text.toByteArray(Charsets.UTF_8))
         } != null
     } catch (error: Exception) {

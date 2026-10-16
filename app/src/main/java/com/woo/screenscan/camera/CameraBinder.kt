@@ -13,16 +13,16 @@ import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.Executor
 
 /** Binds preview and analysis use cases to the lifecycle and exposes zoom and focus controls. */
 class CameraBinder(
     private val owner: LifecycleOwner,
     private val previewView: PreviewView,
+    private val analysisExecutor: Executor,
 ) {
-    val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var camera: Camera? = null
 
     fun start(analyzer: ImageAnalysis.Analyzer) {
@@ -32,6 +32,7 @@ class CameraBinder(
     }
 
     private fun bind(provider: ProcessCameraProvider, analyzer: ImageAnalysis.Analyzer) {
+        if (owner.lifecycle.currentState == Lifecycle.State.DESTROYED) return
         val aspect = AspectRatioStrategy(AspectRatio.RATIO_16_9, AspectRatioStrategy.FALLBACK_RULE_AUTO)
         val preview = Preview.Builder()
             .setResolutionSelector(ResolutionSelector.Builder().setAspectRatioStrategy(aspect).build())
@@ -65,10 +66,6 @@ class CameraBinder(
         val cam = camera ?: return
         val point = previewView.meteringPointFactory.createPoint(x, y)
         cam.cameraControl.startFocusAndMetering(FocusMeteringAction.Builder(point).build())
-    }
-
-    fun shutdown() {
-        analysisExecutor.shutdown()
     }
 
     private companion object {

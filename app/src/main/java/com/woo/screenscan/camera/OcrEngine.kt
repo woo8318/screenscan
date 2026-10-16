@@ -9,9 +9,11 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 class OcrEngine {
     private var language: OcrLanguage? = null
     private var recognizer: TextRecognizer? = null
+    private var closed = false
 
     @Synchronized
     fun recognizer(wanted: OcrLanguage): TextRecognizer {
+        check(!closed) { "OcrEngine is closed" }
         val current = recognizer
         if (current != null && language == wanted) return current
         current?.close()
@@ -23,6 +25,7 @@ class OcrEngine {
 
     @Synchronized
     fun close() {
+        closed = true
         recognizer?.close()
         recognizer = null
         language = null

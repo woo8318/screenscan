@@ -72,6 +72,17 @@ class FrameExtractorTest {
     }
 
     @Test
+    fun usesFrameWideCharWidthForShortAndWideRows() {
+        val top = 100f + TestFixtures.PITCH
+        val hangul = OcrWord("한글", 80f, top, 120f, top + TestFixtures.LINE_H)
+        val wideRow = RawLine(listOf(TestFixtures.word("val", 40f, top), hangul), 40f, top, 120f, top + TestFixtures.LINE_H)
+        val tightBrace = RawLine(listOf(OcrWord("}", 40f, 160f, 45f, 180f)), 40f, 160f, 45f, 180f)
+        val raw = listOf(rawLine(0, 0 to "fun main() {"), wideRow, tightBrace)
+        val frame = FrameExtractor.extract(raw, width, height)
+        assertEquals(listOf("fun main() {", "    val 한글", "    }"), frame.lines.map { it.text })
+    }
+
+    @Test
     fun keepsLeadingNumbersWhenNotRequested() {
         val raw = listOf(
             rawLine(0, 0 to "12", 4 to "fun"),

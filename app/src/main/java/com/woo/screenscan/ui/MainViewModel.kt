@@ -10,6 +10,8 @@ import com.woo.screenscan.ocr.AccumulatorState
 import com.woo.screenscan.ocr.ExtractOptions
 import com.woo.screenscan.ocr.Frame
 import com.woo.screenscan.ocr.FrameStability
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -27,6 +29,9 @@ class MainViewModel : ViewModel() {
 
     val engine = OcrEngine()
 
+    /** Single thread for recognition callbacks; outlives Activity recreation. */
+    val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+
     private val _state = MutableLiveData(AccumulatorState())
     val state: LiveData<AccumulatorState> = _state
 
@@ -41,8 +46,10 @@ class MainViewModel : ViewModel() {
     @Volatile
     private var latestFrame: Frame? = null
 
-    // Only touched from the single analysis thread.
+    @Volatile
     private var pendingKey: List<String>? = null
+
+    @Volatile
     private var lastMergedKey: List<String>? = null
 
     val currentSettings: Settings get() = _settings.value ?: Settings()
@@ -71,11 +78,12 @@ class MainViewModel : ViewModel() {
         latestFrame?.let(::mergeFrame)
     }
 
-    fun undo() = update { it.undo() }
+    /** Undo must not be re-applied by the still-visible scene, so the scene stays "handled". */
+    fun undo() = update(rearm = false) { it.undo() }
 
-    fun clear() = update { it.clear() }
+    fun clear() = update(rearm = false) { it.clear() }
 
-    fun replaceText(text: String) = update { it.replaceWith(text) }
+    fun replaceText(text: String) = update(rearm = true) { it.replaceWith(text) }
 
     fun updateSettings(transform: (Settings) -> Settings) {
         _settings.value = transform(currentSettings)
@@ -91,12 +99,12 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private fun update(transform: (AccumulatorState) -> AccumulatorState) {
+    private fun update(rearm: Boolean, transform: (AccumulatorState) -> AccumulatorState) {
         viewModelScope.launch {
             stateLock.withLock {
                 val current = _state.value ?: AccumulatorState()
                 val next = transform(current)
-                lastMergedKey = null
+                lastMergedKey = if (rearm) null else pendingKey
                 if (next !== current) _state.value = next
             }
         }
@@ -104,6 +112,7 @@ class MainViewModel : ViewModel() {
 
     override fun onCleared() {
         engine.close()
+        analysisExecutor.shutdown()
         super.onCleared()
     }
 }

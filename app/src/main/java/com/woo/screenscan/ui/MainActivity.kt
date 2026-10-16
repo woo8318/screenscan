@@ -2,6 +2,7 @@ package com.woo.screenscan.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -12,7 +13,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.woo.screenscan.R
 import com.woo.screenscan.camera.CameraBinder
 import com.woo.screenscan.camera.OcrLanguage
@@ -41,17 +43,13 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         exporter = TextExporter(this)
-        cameraBinder = CameraBinder(this, binding.preview)
+        cameraBinder = CameraBinder(this, binding.preview, viewModel.analysisExecutor)
 
+        applySystemBarInsets()
         bindButtons()
         bindGestures()
         observeViewModel()
         ensureCameraPermission()
-    }
-
-    override fun onDestroy() {
-        cameraBinder.shutdown()
-        super.onDestroy()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -74,14 +72,28 @@ class MainActivity : AppCompatActivity() {
         else -> super.onOptionsItemSelected(item)
     }
 
+    private fun applySystemBarInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(bars.left, 0, bars.right, bars.bottom)
+            insets
+        }
+    }
+
     private fun bindButtons() = with(binding) {
         autoSwitch.setOnCheckedChangeListener { _, checked ->
             viewModel.updateSettings { it.copy(autoMode = checked) }
         }
         captureButton.setOnClickListener { viewModel.captureNow() }
         pauseButton.setOnClickListener { togglePause() }
-        undoButton.setOnClickListener { viewModel.undo() }
-        clearButton.setOnClickListener { viewModel.clear() }
+        undoButton.setOnClickListener {
+            commitEditsIfPaused()
+            viewModel.undo()
+        }
+        clearButton.setOnClickListener {
+            commitEditsIfPaused()
+            viewModel.clear()
+        }
         copyButton.setOnClickListener {
             withText {
                 exporter.copy(it)
@@ -92,7 +104,13 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun bindGestures() {
+        var pinched = false
         val scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                pinched = true
+                return true
+            }
+
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 cameraBinder.zoomBy(detector.scaleFactor)
                 return true
@@ -100,9 +118,12 @@ class MainActivity : AppCompatActivity() {
         })
         binding.preview.setOnTouchListener { view, event ->
             scaleDetector.onTouchEvent(event)
-            if (event.action == MotionEvent.ACTION_UP && !scaleDetector.isInProgress) {
-                cameraBinder.focusAt(event.x, event.y)
-                view.performClick()
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> pinched = false
+                MotionEvent.ACTION_UP -> if (!pinched) {
+                    cameraBinder.focusAt(event.x, event.y)
+                    view.performClick()
+                }
             }
             true
         }
@@ -110,12 +131,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun observeViewModel() {
         viewModel.state.observe(this) { state ->
-            if (binding.output.text.toString() != state.text) binding.output.setText(state.text)
+            if (binding.output.text.toString() != state.text) {
+                binding.output.setText(state.text)
+                binding.output.setSelection(state.text.length)
+            }
             updateStatus()
         }
         viewModel.settings.observe(this) { settings ->
             binding.pauseButton.setText(if (settings.paused) R.string.resume else R.string.pause)
             binding.captureButton.isEnabled = !settings.paused
+            binding.output.isFocusable = settings.paused
+            binding.output.isFocusableInTouchMode = settings.paused
             updateStatus()
             invalidateOptionsMenu()
         }
@@ -130,11 +156,14 @@ class MainActivity : AppCompatActivity() {
         binding.status.text = getString(R.string.status_format, lineCount, mode, running)
     }
 
-    private fun togglePause(): Boolean {
-        val paused = viewModel.currentSettings.paused
-        if (paused) viewModel.replaceText(outputText())
-        viewModel.updateSettings { it.copy(paused = !paused) }
-        return true
+    private fun togglePause() {
+        commitEditsIfPaused()
+        viewModel.updateSettings { it.copy(paused = !it.paused) }
+    }
+
+    /** Edits are only possible while paused; push them into the model before anything else changes it. */
+    private fun commitEditsIfPaused() {
+        if (viewModel.currentSettings.paused) viewModel.replaceText(outputText())
     }
 
     private fun toggleLanguage(): Boolean = toggleSetting { settings ->
@@ -162,7 +191,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startCamera() {
         val analyzer = TextAnalyzer(
-            executor = cameraBinder.analysisExecutor,
+            executor = viewModel.analysisExecutor,
             recognizer = { viewModel.engine.recognizer(viewModel.currentSettings.language) },
             options = { viewModel.extractOptions },
             onFrame = viewModel::onFrame,

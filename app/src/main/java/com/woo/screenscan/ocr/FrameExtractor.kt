@@ -15,15 +15,18 @@ object FrameExtractor {
     private const val MAX_BLANK_LINES = 5
     private const val MIN_ROWS_FOR_PITCH = 3
     private const val LINE_NUMBER_ROW_RATIO = 0.6f
+    private const val MIN_CELLS_FOR_FRAME_WIDTH = 4
+    private const val MIN_CELLS_FOR_OWN_WIDTH = 8
     private val lineNumberPattern = Regex("^\\d{1,6}$")
 
     private data class Row(
-        val body: String,
+        val words: List<OcrWord>,
         val left: Float,
         val top: Float,
         val right: Float,
         val bottom: Float,
-        val charWidth: Float,
+        val cells: Int,
+        val ownCharWidth: Float?,
     ) {
         val centerY: Float get() = (top + bottom) / 2f
     }
@@ -39,10 +42,12 @@ object FrameExtractor {
         val rowWords = groupIntoRows(kept).map { row -> row.flatMap { it.words }.sortedBy { it.left } }
         val cleaned = if (options.stripLineNumbers) stripLineNumbers(rowWords) else rowWords
         val rows = cleaned.filter { it.isNotEmpty() }.map(::buildRow)
+        val frameCharWidth = frameCharWidth(rows)
         val leftMargin = rows.minOfOrNull { it.left } ?: 0f
         val lines = withBlankLines(rows) { row ->
-            val indent = ((row.left - leftMargin) / row.charWidth).roundToInt().coerceIn(0, MAX_SPACES)
-            TextLine(indent, row.body)
+            val charWidth = if (row.cells >= MIN_CELLS_FOR_OWN_WIDTH) row.ownCharWidth ?: frameCharWidth else frameCharWidth
+            val indent = ((row.left - leftMargin) / charWidth).roundToInt().coerceIn(0, MAX_SPACES)
+            TextLine(indent, rowBody(row.words, charWidth))
         }
         val boxes = rows.map { LineBox(it.left, it.top, it.right, it.bottom) }
         return Frame(lines, boxes, imageWidth, imageHeight)
@@ -77,23 +82,32 @@ object FrameExtractor {
         words.firstOrNull()?.text?.matches(lineNumberPattern) == true
 
     private fun buildRow(words: List<OcrWord>): Row {
-        val totalChars = words.sumOf { it.text.length }
+        val cells = words.sumOf { CharCells.count(it.text) }
         val totalWidth = words.sumOf { it.width.toDouble() }.toFloat()
-        val charWidth = if (totalChars > 0 && totalWidth > 0f) totalWidth / totalChars else 1f
-        val body = buildString {
-            words.forEachIndexed { index, word ->
-                if (index > 0) append(" ".repeat(gapToSpaces(word.left - words[index - 1].right, charWidth)))
-                append(word.text)
-            }
-        }
+        val ownCharWidth = if (cells > 0 && totalWidth > 0f) totalWidth / cells else null
         return Row(
-            body = body,
+            words = words,
             left = words.minOf { it.left },
             top = words.minOf { it.top },
             right = words.maxOf { it.right },
             bottom = words.maxOf { it.bottom },
-            charWidth = charWidth,
+            cells = cells,
+            ownCharWidth = ownCharWidth,
         )
+    }
+
+    /** Median character cell width over rows long enough to measure reliably. */
+    private fun frameCharWidth(rows: List<Row>): Float {
+        val reliable = rows.filter { it.cells >= MIN_CELLS_FOR_FRAME_WIDTH }.mapNotNull { it.ownCharWidth }
+        val candidates = reliable.ifEmpty { rows.mapNotNull { it.ownCharWidth } }.sorted()
+        return if (candidates.isEmpty()) 1f else candidates[candidates.size / 2]
+    }
+
+    private fun rowBody(words: List<OcrWord>, charWidth: Float): String = buildString {
+        words.forEachIndexed { index, word ->
+            if (index > 0) append(" ".repeat(gapToSpaces(word.left - words[index - 1].right, charWidth)))
+            append(word.text)
+        }
     }
 
     private fun gapToSpaces(gap: Float, charWidth: Float): Int {

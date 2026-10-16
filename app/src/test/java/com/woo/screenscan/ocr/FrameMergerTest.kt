@@ -57,6 +57,13 @@ class FrameMergerTest {
     }
 
     @Test
+    fun twoShortGenericLinesDoNotCountAsOverlap() {
+        val existing = lines("a()", "}", "}")
+        val incoming = lines("}", "}", "b()")
+        assertEquals(existing + incoming, FrameMerger.merge(existing, incoming))
+    }
+
+    @Test
     fun singleShortCommonLineDoesNotCountAsOverlap() {
         val existing = lines("foo()", "}")
         val incoming = lines("}", "bar()")
