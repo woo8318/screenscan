@@ -17,6 +17,9 @@ object FrameExtractor {
     private const val LINE_NUMBER_ROW_RATIO = 0.6f
     private const val MIN_CELLS_FOR_FRAME_WIDTH = 4
     private const val MIN_CELLS_FOR_OWN_WIDTH = 8
+    private const val MIN_LINE_CONFIDENCE = 0.5f
+    private const val MIN_FRAME_CONFIDENCE = 0.6f
+    private const val MAX_TILT_DEGREES = 12f
     private val lineNumberPattern = Regex("^\\d{1,6}$")
 
     private data class Row(
@@ -27,6 +30,7 @@ object FrameExtractor {
         val bottom: Float,
         val cells: Int,
         val ownCharWidth: Float?,
+        val confidence: Float,
     ) {
         val centerY: Float get() = (top + bottom) / 2f
     }
@@ -37,20 +41,45 @@ object FrameExtractor {
         imageHeight: Int,
         options: ExtractOptions = ExtractOptions(),
     ): Frame {
+        val angle = Deskew.medianAngle(rawLines)
+        val confidence = medianConfidence(rawLines)
+        val verdict = verdict(rawLines, confidence, angle)
+        val quality = FrameQuality(verdict, confidence, angle)
+        if (verdict == FrameVerdict.EMPTY) return Frame(emptyList(), emptyList(), imageWidth, imageHeight, quality)
+
+        val straightened = Deskew.rotate(rawLines, angle, imageWidth, imageHeight)
         val margin = imageHeight * EDGE_MARGIN_RATIO
-        val kept = rawLines.filter { it.words.isNotEmpty() && it.top > margin && it.bottom < imageHeight - margin }
-        val rowWords = groupIntoRows(kept).map { row -> row.flatMap { it.words }.sortedBy { it.left } }
+        val kept = straightened.filter {
+            it.words.isNotEmpty() && it.confidence >= MIN_LINE_CONFIDENCE &&
+                it.top > margin && it.bottom < imageHeight - margin
+        }
+        val rowGroups = groupIntoRows(kept)
+        val rowWords = rowGroups.map { row -> row.flatMap { it.words }.sortedBy { it.left } }
+        val rowConfidence = rowGroups.map { row -> row.minOf { it.confidence } }
         val cleaned = if (options.stripLineNumbers) stripLineNumbers(rowWords) else rowWords
-        val rows = cleaned.filter { it.isNotEmpty() }.map(::buildRow)
+        val rows = cleaned.zip(rowConfidence).filter { it.first.isNotEmpty() }.map { (words, conf) -> buildRow(words, conf) }
         val frameCharWidth = frameCharWidth(rows)
         val leftMargin = rows.minOfOrNull { it.left } ?: 0f
         val lines = withBlankLines(rows) { row ->
             val charWidth = if (row.cells >= MIN_CELLS_FOR_OWN_WIDTH) row.ownCharWidth ?: frameCharWidth else frameCharWidth
             val indent = ((row.left - leftMargin) / charWidth).roundToInt().coerceIn(0, MAX_SPACES)
-            TextLine(indent, rowBody(row.words, charWidth))
+            TextLine(indent, rowBody(row.words, charWidth), row.confidence)
         }
         val boxes = rows.map { LineBox(it.left, it.top, it.right, it.bottom) }
-        return Frame(lines, boxes, imageWidth, imageHeight)
+        return Frame(lines, boxes, imageWidth, imageHeight, quality)
+    }
+
+    private fun medianConfidence(lines: List<RawLine>): Float {
+        if (lines.isEmpty()) return 0f
+        val sorted = lines.map { it.confidence }.sorted()
+        return sorted[sorted.size / 2]
+    }
+
+    private fun verdict(lines: List<RawLine>, confidence: Float, angle: Float): FrameVerdict = when {
+        lines.isEmpty() -> FrameVerdict.EMPTY
+        abs(angle) > MAX_TILT_DEGREES -> FrameVerdict.TILTED
+        confidence < MIN_FRAME_CONFIDENCE -> FrameVerdict.BLURRY
+        else -> FrameVerdict.OK
     }
 
     private fun groupIntoRows(lines: List<RawLine>): List<List<RawLine>> {
@@ -81,7 +110,7 @@ object FrameExtractor {
     private fun startsWithLineNumber(words: List<OcrWord>): Boolean =
         words.firstOrNull()?.text?.matches(lineNumberPattern) == true
 
-    private fun buildRow(words: List<OcrWord>): Row {
+    private fun buildRow(words: List<OcrWord>, confidence: Float): Row {
         val cells = words.sumOf { CharCells.count(it.text) }
         val totalWidth = words.sumOf { it.width.toDouble() }.toFloat()
         val ownCharWidth = if (cells > 0 && totalWidth > 0f) totalWidth / cells else null
@@ -93,6 +122,7 @@ object FrameExtractor {
             bottom = words.maxOf { it.bottom },
             cells = cells,
             ownCharWidth = ownCharWidth,
+            confidence = confidence,
         )
     }
 

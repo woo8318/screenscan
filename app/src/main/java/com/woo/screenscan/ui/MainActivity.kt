@@ -20,6 +20,7 @@ import com.woo.screenscan.camera.CameraBinder
 import com.woo.screenscan.camera.OcrLanguage
 import com.woo.screenscan.camera.TextAnalyzer
 import com.woo.screenscan.databinding.ActivityMainBinding
+import com.woo.screenscan.ocr.FrameVerdict
 import com.woo.screenscan.update.UpdateViewModel
 
 class MainActivity : AppCompatActivity() {
@@ -31,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val updateViewModel: UpdateViewModel by viewModels()
     private var updateMessage: String? = null
+    private var feedbackText: String? = null
 
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startCamera() else toast(R.string.camera_permission_denied)
@@ -161,7 +163,24 @@ class MainActivity : AppCompatActivity() {
             invalidateOptionsMenu()
         }
         viewModel.lastFrame.observe(this) { frame -> binding.overlay.update(frame) }
+        viewModel.feedback.observe(this) { feedback ->
+            feedbackText = describe(feedback)
+            updateStatus()
+        }
         updateViewModel.state.observe(this) { state -> updatePrompter.render(state) }
+    }
+
+    private fun describe(feedback: MainViewModel.Feedback): String = when (feedback) {
+        is MainViewModel.Feedback.Added ->
+            if (feedback.lines > 0) getString(R.string.feedback_added, feedback.lines) else getString(R.string.feedback_unchanged)
+        MainViewModel.Feedback.NoOverlap -> getString(R.string.feedback_no_overlap)
+        MainViewModel.Feedback.Unchanged -> getString(R.string.feedback_unchanged)
+        is MainViewModel.Feedback.Rejected -> when (feedback.verdict) {
+            FrameVerdict.BLURRY -> getString(R.string.feedback_blurry, feedback.confidence)
+            FrameVerdict.TILTED -> getString(R.string.feedback_tilted, viewModel.lastFrame.value?.quality?.angle ?: 0f)
+            FrameVerdict.EMPTY -> getString(R.string.feedback_empty)
+            FrameVerdict.OK -> ""
+        }
     }
 
     private fun updateStatus() {
@@ -175,7 +194,9 @@ class MainActivity : AppCompatActivity() {
         val mode = getString(if (settings.autoMode) R.string.status_auto else R.string.status_manual)
         val running = getString(if (settings.paused) R.string.status_paused else R.string.status_running)
         val version = UpdatePrompter.installedVersion(this)
-        binding.status.text = getString(R.string.status_format, lineCount, mode, running, version)
+        val base = getString(R.string.status_format, lineCount, mode, running, version)
+        val feedback = feedbackText
+        binding.status.text = if (feedback.isNullOrEmpty()) base else "$base · $feedback"
     }
 
     private fun togglePause() {

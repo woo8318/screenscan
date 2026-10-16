@@ -7,9 +7,12 @@ data class AccumulatorState(
 ) {
     val text: String get() = lines.joinToString("\n") { it.text }
 
-    fun merge(incoming: List<TextLine>): AccumulatorState {
-        val merged = FrameMerger.merge(lines, incoming)
-        return if (merged == lines) this else AccumulatorState(merged, pushHistory())
+    data class Merged(val state: AccumulatorState, val result: FrameMerger.Result)
+
+    fun merge(incoming: List<TextLine>, requireOverlap: Boolean = false): Merged {
+        val result = FrameMerger.merge(lines, incoming, requireOverlap)
+        val next = if (result.lines == lines) this else AccumulatorState(result.lines, pushHistory())
+        return Merged(next, result)
     }
 
     fun undo(): AccumulatorState =

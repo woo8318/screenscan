@@ -18,12 +18,17 @@ data class RawLine(
     val top: Float,
     val right: Float,
     val bottom: Float,
+    /** Recognizer confidence 0..1; 1 when the engine reports none. */
+    val confidence: Float = 1f,
+    /** Rotation of the text baseline in degrees, clockwise positive. */
+    val angle: Float = 0f,
 )
 
 /** A reconstructed text line: leading indentation in spaces plus the body. */
 data class TextLine(
     val indent: Int,
     val body: String,
+    val confidence: Float = 1f,
 ) {
     val text: String get() = " ".repeat(indent) + body
     val isBlank: Boolean get() = body.isBlank()
@@ -46,12 +51,29 @@ data class LineBox(
     val bottom: Float,
 )
 
+/** Why a frame was accepted or rejected before merging. */
+enum class FrameVerdict {
+    OK,
+    EMPTY,
+    BLURRY,
+    TILTED,
+}
+
+data class FrameQuality(
+    val verdict: FrameVerdict,
+    val confidence: Float,
+    val angle: Float,
+) {
+    val accepted: Boolean get() = verdict == FrameVerdict.OK
+}
+
 /** Result of one analyzed camera frame. */
 data class Frame(
     val lines: List<TextLine>,
     val boxes: List<LineBox>,
     val imageWidth: Int,
     val imageHeight: Int,
+    val quality: FrameQuality,
 )
 
 data class ExtractOptions(

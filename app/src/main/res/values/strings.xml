@@ -14,6 +14,12 @@
     <string name="strip_line_numbers">줄번호 제거</string>
     <string name="output_hint">카메라를 화면에 비추고 스크롤하면 새 줄이 여기에 쌓입니다.</string>
     <string name="status_format">%1$d줄 · %2$s · %3$s · v%4$s</string>
+    <string name="feedback_added">%1$d줄 추가</string>
+    <string name="feedback_no_overlap">겹치는 줄 없음, 조금만 움직이세요</string>
+    <string name="feedback_unchanged">새 줄 없음</string>
+    <string name="feedback_blurry">흐림 (품질 %1$.2f)</string>
+    <string name="feedback_tilted">기울어짐 (%1$.0f°)</string>
+    <string name="feedback_empty">글자 없음</string>
     <string name="check_update">업데이트 확인</string>
     <string name="update_available_title">새 버전 업데이트</string>
     <string name="update_available_message">%1$s 이(가) 나왔습니다. 설치된 버전은 v%2$s 입니다. 지금 받아서 설치할까요?</string>

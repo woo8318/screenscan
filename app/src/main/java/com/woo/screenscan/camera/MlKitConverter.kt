@@ -17,6 +17,18 @@ object MlKitConverter {
             }
         }
         if (words.isEmpty()) return null
-        return RawLine(words, box.left.toFloat(), box.top.toFloat(), box.right.toFloat(), box.bottom.toFloat())
+        return RawLine(
+            words = words,
+            left = box.left.toFloat(),
+            top = box.top.toFloat(),
+            right = box.right.toFloat(),
+            bottom = box.bottom.toFloat(),
+            confidence = knownConfidence(line.confidence),
+            angle = line.angle ?: 0f,
+        )
     }
+
+    /** Some models report no confidence (0 or NaN); treat that as "unknown" rather than "bad". */
+    private fun knownConfidence(value: Float?): Float =
+        if (value == null || value.isNaN() || value <= 0f) 1f else value
 }

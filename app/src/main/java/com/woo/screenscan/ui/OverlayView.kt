@@ -11,24 +11,23 @@ import com.woo.screenscan.ocr.Frame
 import com.woo.screenscan.ocr.LineBox
 import kotlin.math.max
 
-/** Draws recognized line boxes over the preview, assuming the preview fills and center-crops. */
+/** Draws recognized line boxes over the preview: green when the frame is usable, red when rejected. */
 class OverlayView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = STROKE_WIDTH
-        color = ContextCompat.getColor(context, R.color.overlay_box)
-    }
+    private val acceptedPaint = boxPaint(R.color.overlay_accepted)
+    private val rejectedPaint = boxPaint(R.color.overlay_rejected)
 
     private var boxes: List<LineBox> = emptyList()
+    private var accepted = true
     private var imageWidth = 1
     private var imageHeight = 1
 
     fun update(frame: Frame) {
         boxes = frame.boxes
+        accepted = frame.quality.accepted
         imageWidth = max(1, frame.imageWidth)
         imageHeight = max(1, frame.imageHeight)
         invalidate()
@@ -37,6 +36,7 @@ class OverlayView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (boxes.isEmpty()) return
+        val paint = if (accepted) acceptedPaint else rejectedPaint
         val scale = max(width / imageWidth.toFloat(), height / imageHeight.toFloat())
         val dx = (width - imageWidth * scale) / 2f
         val dy = (height - imageHeight * scale) / 2f
@@ -49,6 +49,12 @@ class OverlayView @JvmOverloads constructor(
                 paint,
             )
         }
+    }
+
+    private fun boxPaint(colorRes: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = STROKE_WIDTH
+        color = ContextCompat.getColor(context, colorRes)
     }
 
     private companion object {

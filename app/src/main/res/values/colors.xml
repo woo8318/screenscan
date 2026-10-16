@@ -2,5 +2,6 @@
 <resources>
     <color name="launcher_background">#1E293B</color>
     <color name="launcher_foreground">#38BDF8</color>
-    <color name="overlay_box">#8038BDF8</color>
+    <color name="overlay_accepted">#A022C55E</color>
+    <color name="overlay_rejected">#A0EF4444</color>
 </resources>
