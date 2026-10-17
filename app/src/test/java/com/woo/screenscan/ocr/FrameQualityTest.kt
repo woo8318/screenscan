@@ -58,6 +58,28 @@ class FrameQualityTest {
     }
 
     @Test
+    fun rightAngleReportsAreTreatedAsUpright() {
+        val raw = listOf(
+            rawLine(0, 0 to "Thought for 9s").copy(angle = -90f),
+            rawLine(1, 0 to "second line").copy(angle = -90f),
+            rawLine(2, 0 to "third line").copy(angle = 180f),
+        )
+        val frame = FrameExtractor.extract(raw, width, height)
+        assertEquals(FrameVerdict.OK, frame.quality.verdict)
+        assertEquals(0f, frame.quality.angle)
+        assertEquals(listOf("Thought for 9s", "second line", "third line"), frame.lines.map { it.text })
+    }
+
+    @Test
+    fun foldAngleKeepsSmallTiltsAndSign() {
+        assertEquals(5f, Deskew.foldAngle(5f))
+        assertEquals(-5f, Deskew.foldAngle(-5f))
+        assertEquals(-5f, Deskew.foldAngle(-95f))
+        assertEquals(5f, Deskew.foldAngle(95f))
+        assertEquals(0f, Deskew.foldAngle(-90f))
+    }
+
+    @Test
     fun stronglyTiltedFrameIsRejected() {
         val raw = listOf(rawLine(0, 0 to "a b").copy(angle = 20f), rawLine(1, 0 to "c d").copy(angle = 18f))
         val frame = FrameExtractor.extract(raw, width, height)

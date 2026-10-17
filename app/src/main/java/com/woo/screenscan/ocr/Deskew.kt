@@ -7,10 +7,25 @@ import kotlin.math.sin
 object Deskew {
     private const val MIN_ANGLE_TO_CORRECT = 0.5f
 
+    private const val RIGHT_ANGLE = 90f
+    private const val HALF_RIGHT_ANGLE = 45f
+
     fun medianAngle(lines: List<RawLine>): Float {
         if (lines.isEmpty()) return 0f
-        val sorted = lines.map { it.angle }.sorted()
+        val sorted = lines.map { foldAngle(it.angle) }.sorted()
         return sorted[sorted.size / 2]
+    }
+
+    /**
+     * Folds an angle into (-45, 45]: text reported as ±90° or 180° is upright text described
+     * in another orientation convention, not a tilt we should correct or reject.
+     */
+    fun foldAngle(angle: Float): Float {
+        if (angle.isNaN()) return 0f
+        var folded = angle % RIGHT_ANGLE
+        if (folded > HALF_RIGHT_ANGLE) folded -= RIGHT_ANGLE
+        if (folded <= -HALF_RIGHT_ANGLE) folded += RIGHT_ANGLE
+        return folded + 0f // turns -0.0 into 0.0
     }
 
     /** Rotates every word box by -[angle] degrees around the image centre. */

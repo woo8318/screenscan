@@ -1,8 +1,11 @@
 package com.woo.screenscan.camera
 
+import android.graphics.Point
 import com.google.mlkit.vision.text.Text
+import com.woo.screenscan.ocr.Deskew
 import com.woo.screenscan.ocr.OcrWord
 import com.woo.screenscan.ocr.RawLine
+import kotlin.math.atan2
 
 /** Converts ML Kit output into the engine-agnostic model used by the extractor. */
 object MlKitConverter {
@@ -24,11 +27,30 @@ object MlKitConverter {
             right = box.right.toFloat(),
             bottom = box.bottom.toFloat(),
             confidence = knownConfidence(line.confidence),
-            angle = line.angle ?: 0f,
+            angle = lineAngle(line),
         )
     }
 
     /** Some models report no confidence (0 or NaN); treat that as "unknown" rather than "bad". */
     private fun knownConfidence(value: Float?): Float =
         if (value == null || value.isNaN() || value <= 0f) 1f else value
+
+    /**
+     * Tilt of the text baseline in the same coordinate system as the bounding boxes.
+     * ML Kit's own angle is relative to the sensor orientation (upright text reads as -90°),
+     * so the top edge of the corner quadrilateral is measured instead when available.
+     */
+    private fun lineAngle(line: Text.Line): Float {
+        val corners = line.cornerPoints
+        val fromCorners = if (corners != null && corners.size >= 2) angleBetween(corners[0], corners[1]) else null
+        val raw = fromCorners ?: line.angle ?: 0f
+        return Deskew.foldAngle(raw)
+    }
+
+    private fun angleBetween(a: Point, b: Point): Float? {
+        val dx = (b.x - a.x).toFloat()
+        val dy = (b.y - a.y).toFloat()
+        if (dx == 0f && dy == 0f) return null
+        return Math.toDegrees(atan2(dy, dx).toDouble()).toFloat()
+    }
 }
