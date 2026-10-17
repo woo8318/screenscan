@@ -41,13 +41,14 @@ object FrameExtractor {
         imageHeight: Int,
         options: ExtractOptions = ExtractOptions(),
     ): Frame {
-        val angle = Deskew.medianAngle(rawLines)
-        val confidence = medianConfidence(rawLines)
-        val verdict = verdict(rawLines, confidence, angle)
+        val inBand = rawLines.filter { insideBand(it, imageHeight, options) }
+        val angle = Deskew.medianAngle(inBand)
+        val confidence = medianConfidence(inBand)
+        val verdict = verdict(inBand, confidence, angle)
         val quality = FrameQuality(verdict, confidence, angle)
         if (verdict == FrameVerdict.EMPTY) return Frame(emptyList(), emptyList(), imageWidth, imageHeight, quality)
 
-        val straightened = Deskew.rotate(rawLines, angle, imageWidth, imageHeight)
+        val straightened = Deskew.rotate(inBand, angle, imageWidth, imageHeight)
         val margin = imageHeight * EDGE_MARGIN_RATIO
         val kept = straightened.filter {
             it.words.isNotEmpty() && it.confidence >= MIN_LINE_CONFIDENCE &&
@@ -67,6 +68,11 @@ object FrameExtractor {
         }
         val boxes = rows.map { LineBox(it.left, it.top, it.right, it.bottom) }
         return Frame(lines, boxes, imageWidth, imageHeight, quality)
+    }
+
+    private fun insideBand(line: RawLine, imageHeight: Int, options: ExtractOptions): Boolean {
+        val center = (line.top + line.bottom) / 2f
+        return center >= options.bandTop * imageHeight && center <= options.bandBottom * imageHeight
     }
 
     private fun medianConfidence(lines: List<RawLine>): Float {

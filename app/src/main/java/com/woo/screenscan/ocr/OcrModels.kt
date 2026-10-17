@@ -78,4 +78,7 @@ data class Frame(
 
 data class ExtractOptions(
     val stripLineNumbers: Boolean = false,
+    /** Only lines whose centre lies inside this vertical band (fractions of image height) are used. */
+    val bandTop: Float = 0f,
+    val bandBottom: Float = 1f,
 )

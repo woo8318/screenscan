@@ -22,11 +22,19 @@ import kotlinx.coroutines.withContext
 
 class MainViewModel : ViewModel() {
 
+    /** Height of the scan band as a fraction of the visible preview. */
+    enum class Band(val fraction: Float) {
+        WIDE(1f),
+        NORMAL(0.5f),
+        NARROW(0.3f),
+    }
+
     data class Settings(
         /** Hands-free mode: every usable frame is merged. Off means the text can be edited. */
         val scanning: Boolean = true,
         val language: OcrLanguage = OcrLanguage.KOREAN,
         val stripLineNumbers: Boolean = false,
+        val band: Band = Band.NORMAL,
     )
 
     /** What happened to the most recent frame, for the status line. */
@@ -67,8 +75,21 @@ class MainViewModel : ViewModel() {
     @Volatile
     private var noOverlapKey: List<String>? = null
 
+    /** Band in image-height fractions, as the overlay computed it from the visible preview. */
+    @Volatile
+    private var imageBand: Pair<Float, Float> = 0f to 1f
+
     val currentSettings: Settings get() = _settings.value ?: Settings()
-    val extractOptions: ExtractOptions get() = ExtractOptions(currentSettings.stripLineNumbers)
+    val extractOptions: ExtractOptions
+        get() = ExtractOptions(
+            stripLineNumbers = currentSettings.stripLineNumbers,
+            bandTop = imageBand.first,
+            bandBottom = imageBand.second,
+        )
+
+    fun setImageBand(top: Float, bottom: Float) {
+        imageBand = top to bottom
+    }
 
     /** Called on the analysis thread for every recognized frame. */
     fun onFrame(frame: Frame) {

@@ -20,6 +20,24 @@
         android:title="@string/strip_line_numbers"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_band"
+        android:title="@string/band_title"
+        app:showAsAction="never">
+        <menu>
+            <group android:checkableBehavior="single">
+                <item
+                    android:id="@+id/action_band_wide"
+                    android:title="@string/band_wide" />
+                <item
+                    android:id="@+id/action_band_normal"
+                    android:title="@string/band_normal" />
+                <item
+                    android:id="@+id/action_band_narrow"
+                    android:title="@string/band_narrow" />
+            </group>
+        </menu>
+    </item>
+    <item
         android:id="@+id/action_check_update"
         android:title="@string/check_update"
         app:showAsAction="never" />

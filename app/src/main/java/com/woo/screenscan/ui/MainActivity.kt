@@ -73,6 +73,12 @@ class MainActivity : AppCompatActivity() {
         val settings = viewModel.currentSettings
         menu.findItem(R.id.action_engine_korean).isChecked = settings.language == OcrLanguage.KOREAN
         menu.findItem(R.id.action_strip_line_numbers).isChecked = settings.stripLineNumbers
+        val bandItem = when (settings.band) {
+            MainViewModel.Band.WIDE -> R.id.action_band_wide
+            MainViewModel.Band.NORMAL -> R.id.action_band_normal
+            MainViewModel.Band.NARROW -> R.id.action_band_narrow
+        }
+        menu.findItem(bandItem).isChecked = true
         return super.onPrepareOptionsMenu(menu)
     }
 
@@ -81,6 +87,9 @@ class MainActivity : AppCompatActivity() {
         R.id.action_save -> withText { createDocument.launch(getString(R.string.default_file_name)) }
         R.id.action_engine_korean -> toggleLanguage()
         R.id.action_strip_line_numbers -> toggleSetting { it.copy(stripLineNumbers = !it.stripLineNumbers) }
+        R.id.action_band_wide -> toggleSetting { it.copy(band = MainViewModel.Band.WIDE) }
+        R.id.action_band_normal -> toggleSetting { it.copy(band = MainViewModel.Band.NORMAL) }
+        R.id.action_band_narrow -> toggleSetting { it.copy(band = MainViewModel.Band.NARROW) }
         R.id.action_check_update -> checkForUpdate()
         else -> super.onOptionsItemSelected(item)
     }
@@ -155,7 +164,9 @@ class MainActivity : AppCompatActivity() {
             }
             updateStatus()
         }
+        binding.overlay.bandListener = OverlayView.BandListener { top, bottom -> viewModel.setImageBand(top, bottom) }
         viewModel.settings.observe(this) { settings ->
+            binding.overlay.setBandFraction(settings.band.fraction)
             binding.scanButton.setText(if (settings.scanning) R.string.scan_stop else R.string.scan_start)
             binding.output.isFocusable = !settings.scanning
             binding.output.isFocusableInTouchMode = !settings.scanning

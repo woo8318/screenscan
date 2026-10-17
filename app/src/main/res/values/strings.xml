@@ -21,6 +21,10 @@
     <string name="feedback_blurry">흐림</string>
     <string name="feedback_tilted">기울어짐 (%1$.0f°)</string>
     <string name="feedback_empty">글자 없음</string>
+    <string name="band_title">스캔 범위</string>
+    <string name="band_wide">넓게 (전체)</string>
+    <string name="band_normal">보통 (가운데 절반)</string>
+    <string name="band_narrow">좁게 (가운데 30%)</string>
     <string name="check_update">업데이트 확인</string>
     <string name="update_available_title">새 버전 업데이트</string>
     <string name="update_available_message">%1$s 이(가) 나왔습니다. 설치된 버전은 v%2$s 입니다. 지금 받아서 설치할까요?</string>

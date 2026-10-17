@@ -45,6 +45,19 @@ class FrameQualityTest {
     }
 
     @Test
+    fun onlyLinesInsideTheBandAreUsed() {
+        val raw = listOf(
+            rawLine(0, 0 to "above band"),   // centre y = 110
+            rawLine(10, 0 to "inside one"),  // centre y = 410
+            rawLine(11, 0 to "inside two"),  // centre y = 440
+            rawLine(30, 0 to "below band"),  // centre y = 1010
+        )
+        val options = ExtractOptions(bandTop = 0.3f, bandBottom = 0.5f)
+        val frame = FrameExtractor.extract(raw, width, height, options)
+        assertEquals(listOf("inside one", "inside two"), frame.lines.map { it.text })
+    }
+
+    @Test
     fun stronglyTiltedFrameIsRejected() {
         val raw = listOf(rawLine(0, 0 to "a b").copy(angle = 20f), rawLine(1, 0 to "c d").copy(angle = 18f))
         val frame = FrameExtractor.extract(raw, width, height)
