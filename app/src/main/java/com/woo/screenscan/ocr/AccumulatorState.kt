@@ -9,8 +9,8 @@ data class AccumulatorState(
 
     data class Merged(val state: AccumulatorState, val result: FrameMerger.Result)
 
-    fun merge(incoming: List<TextLine>, requireOverlap: Boolean = false): Merged {
-        val result = FrameMerger.merge(lines, incoming, requireOverlap)
+    fun merge(incoming: List<TextLine>, requireOverlap: Boolean = false, confirmed: Set<String> = emptySet()): Merged {
+        val result = FrameMerger.merge(lines, incoming, requireOverlap, confirmed)
         val next = if (result.lines == lines) this else AccumulatorState(result.lines, pushHistory())
         return Merged(next, result)
     }

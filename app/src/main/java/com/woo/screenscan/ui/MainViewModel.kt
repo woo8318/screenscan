@@ -75,6 +75,10 @@ class MainViewModel : ViewModel() {
     @Volatile
     private var noOverlapKey: List<String>? = null
 
+    /** Near-duplicate readings held back by the last merge; the next frame may confirm them. */
+    @Volatile
+    private var heldReadings: Set<String> = emptySet()
+
     /** Band in image-height fractions, as the overlay computed it from the visible preview. */
     @Volatile
     private var imageBand: Pair<Float, Float> = 0f to 1f
@@ -126,13 +130,15 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             stateLock.withLock {
                 val current = _state.value ?: AccumulatorState()
-                val first = withContext(Dispatchers.Default) { current.merge(frame.lines, requireOverlap = true) }
+                val confirmed = heldReadings
+                val first = withContext(Dispatchers.Default) { current.merge(frame.lines, true, confirmed) }
                 val seenTwice = FrameStability.isSame(noOverlapKey, key)
                 val merged = if (first.result is FrameMerger.Result.NoOverlap && seenTwice) {
-                    withContext(Dispatchers.Default) { current.merge(frame.lines, requireOverlap = false) }
+                    withContext(Dispatchers.Default) { current.merge(frame.lines, false, confirmed) }
                 } else {
                     first
                 }
+                heldReadings = merged.result.held.toSet()
                 if (merged.result is FrameMerger.Result.NoOverlap) {
                     noOverlapKey = key
                 } else {
@@ -170,6 +176,7 @@ class MainViewModel : ViewModel() {
                 val next = transform(current)
                 lastMergedKey = if (rearm) null else latestFrame?.let(FrameStability::key)
                 noOverlapKey = null
+                heldReadings = emptySet()
                 if (next !== current) _state.value = next
             }
         }

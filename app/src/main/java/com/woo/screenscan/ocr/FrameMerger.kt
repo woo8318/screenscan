@@ -3,15 +3,16 @@ package com.woo.screenscan.ocr
 /**
  * Appends a new frame onto accumulated lines by finding where the frame overlaps the tail
  * of what was already captured. Only lines past the overlap are added, and overlapping
- * lines are upgraded when the new frame read them with higher confidence.
+ * lines are reconciled with the new reading.
  */
 object FrameMerger {
     private const val MATCH_THRESHOLD_SHORT = 0.85f
-    private const val MATCH_THRESHOLD_LONG = 0.8f
+    private const val MATCH_THRESHOLD_MEDIUM = 0.8f
+    private const val MATCH_THRESHOLD_LONG = 0.75f
+    private const val MEDIUM_LINE_LENGTH = 10
     private const val LONG_LINE_LENGTH = 20
     private const val DUPLICATE_THRESHOLD = 0.75f
     private const val MIN_MATCH_RATIO = 0.5f
-    private const val MAX_DUPLICATE_RATIO = 0.5f
     private const val MIN_MATCHES = 2
     private const val MIN_SINGLE_MATCH_LENGTH = 6
     private const val MIN_MATCHED_LENGTH = 6
@@ -32,33 +33,37 @@ object FrameMerger {
     sealed interface Result {
         val lines: List<TextLine>
 
-        data class Appended(override val lines: List<TextLine>, val added: Int) : Result
-        data class NoOverlap(override val lines: List<TextLine>) : Result
-        data class Unchanged(override val lines: List<TextLine>) : Result
+        /** Normalized keys of near-duplicate lines held back until a second frame confirms them. */
+        val held: List<String>
+
+        data class Appended(override val lines: List<TextLine>, val added: Int, override val held: List<String> = emptyList()) : Result
+        data class NoOverlap(override val lines: List<TextLine>, override val held: List<String> = emptyList()) : Result
+        data class Unchanged(override val lines: List<TextLine>, override val held: List<String> = emptyList()) : Result
     }
 
     /**
      * Merges [incoming] into [existing]. With [requireOverlap] a frame that does not line up
      * with the captured tail is ignored instead of appended, which keeps garbage out while the
-     * camera is moving.
+     * camera is moving. New lines that merely resemble captured lines are OCR noise unless the
+     * same reading was already [confirmed] by the previous frame.
      */
-    fun merge(existing: List<TextLine>, incoming: List<TextLine>, requireOverlap: Boolean = false): Result {
+    fun merge(
+        existing: List<TextLine>,
+        incoming: List<TextLine>,
+        requireOverlap: Boolean = false,
+        confirmed: Set<String> = emptySet(),
+    ): Result {
         val trimmed = trimBlankEdges(incoming)
         if (trimmed.isEmpty()) return Result.Unchanged(existing)
         if (existing.isEmpty()) return Result.Appended(trimmed, trimmed.size)
         val alignment = findAlignment(existing, trimmed)
-            ?: return if (requireOverlap) Result.NoOverlap(existing) else Result.Appended(existing + trimmed, trimmed.size)
+        if (alignment == null && requireOverlap) return Result.NoOverlap(existing)
 
-        val upgraded = upgradeMatched(existing, trimmed, alignment)
-        val appended = trimmed.drop(alignment.overlap).map { line ->
-            if (line.isBlank || line.cutLeft) line
-            else line.copy(indent = (line.indent + alignment.indentDelta).coerceAtLeast(0))
-        }
-        if (looksDuplicated(existing, appended, trimmed.size)) {
-            return if (upgraded == existing) Result.Unchanged(existing) else Result.Appended(upgraded, 0)
-        }
+        val upgraded = if (alignment == null) existing else upgradeMatched(existing, trimmed, alignment)
+        val candidates = if (alignment == null) trimmed else shiftIndent(trimmed.drop(alignment.overlap), alignment.indentDelta)
+        val (appended, held) = holdNearDuplicates(existing, candidates, trimmed.size, confirmed)
         val merged = upgraded + appended
-        return if (merged == existing) Result.Unchanged(existing) else Result.Appended(merged, appended.size)
+        return if (merged == existing) Result.Unchanged(existing, held) else Result.Appended(merged, appended.size, held)
     }
 
     /**
@@ -107,9 +112,14 @@ object FrameMerger {
         return matchesAreStrong(alignment.matchedPairs, normIncoming)
     }
 
+    private fun matchThreshold(length: Int): Float = when {
+        length >= LONG_LINE_LENGTH -> MATCH_THRESHOLD_LONG
+        length >= MEDIUM_LINE_LENGTH -> MATCH_THRESHOLD_MEDIUM
+        else -> MATCH_THRESHOLD_SHORT
+    }
+
     private fun linesMatch(a: String, b: String): Boolean {
-        val threshold = if (maxOf(a.length, b.length) >= LONG_LINE_LENGTH) MATCH_THRESHOLD_LONG else MATCH_THRESHOLD_SHORT
-        if (LineNormalizer.similarity(a, b) >= threshold) return true
+        if (LineNormalizer.similarity(a, b) >= matchThreshold(maxOf(a.length, b.length))) return true
         // A fragment cut at the frame edge still identifies the line it came from, either
         // because it sits inside the other reading or because the two readings overlap at the cut.
         if (minOf(a.length, b.length) < MIN_FRAGMENT_LENGTH) return false
@@ -124,24 +134,42 @@ object FrameMerger {
         return matched.size >= MIN_MATCHES || normIncoming[matched.single().first].length >= MIN_SINGLE_MATCH_LENGTH
     }
 
+    private fun shiftIndent(lines: List<TextLine>, delta: Int): List<TextLine> = lines.map { line ->
+        if (line.isBlank || line.cutLeft) line else line.copy(indent = (line.indent + delta).coerceAtLeast(0))
+    }
+
     /**
-     * Lines about to be appended that already resemble lines in the captured tail are a
-     * re-read of the same screen with a mis-chosen anchor, not new content.
+     * Splits candidate lines into ones to append now and ones to hold back. A candidate that
+     * resembles (but does not equal) a line in the captured tail is most likely a misread of
+     * that line; it is appended only when the previous frame produced the same reading.
+     * Exact repeats are always kept, since logs legitimately repeat lines.
      */
-    private fun looksDuplicated(existing: List<TextLine>, appended: List<TextLine>, frameSize: Int): Boolean {
-        val candidates = appended.filterNot { it.isBlank }
-        if (candidates.isEmpty()) return false
+    private fun holdNearDuplicates(
+        existing: List<TextLine>,
+        candidates: List<TextLine>,
+        frameSize: Int,
+        confirmed: Set<String>,
+    ): Pair<List<TextLine>, List<String>> {
         val tail = existing.takeLast(frameSize * SEARCH_WINDOW_FACTOR)
             .filterNot { it.isBlank }
             .map { LineNormalizer.normalize(it.body) }
-        val duplicates = candidates.count { line ->
+        val held = mutableListOf<String>()
+        val kept = candidates.filter { line ->
             val norm = LineNormalizer.normalize(line.body)
-            norm.length >= MIN_SINGLE_MATCH_LENGTH && tail.any { known ->
-                LineNormalizer.similarity(norm, known) >= DUPLICATE_THRESHOLD ||
-                    (norm.length >= MIN_FRAGMENT_LENGTH && LineNormalizer.containmentSimilarity(norm, known) >= MATCH_THRESHOLD_SHORT)
+            val suspicious = norm.length >= MIN_SINGLE_MATCH_LENGTH && tail.any { known -> isNearDuplicate(norm, known) }
+            if (!suspicious || norm in confirmed) true else {
+                held += norm
+                false
             }
         }
-        return duplicates.toFloat() / candidates.size > MAX_DUPLICATE_RATIO
+        return kept to held
+    }
+
+    private fun isNearDuplicate(candidate: String, known: String): Boolean {
+        if (candidate == known) return false
+        if (LineNormalizer.similarity(candidate, known) >= DUPLICATE_THRESHOLD) return true
+        return candidate.length >= MIN_FRAGMENT_LENGTH &&
+            LineNormalizer.containmentSimilarity(candidate, known) >= MATCH_THRESHOLD_SHORT
     }
 
     /** Improves matched existing lines with the incoming reading (longer, stitched or more confident). */

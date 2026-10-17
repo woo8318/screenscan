@@ -140,6 +140,20 @@ class FrameMergerTest {
     }
 
     @Test
+    fun nearDuplicateIsHeldUntilASecondFrameConfirmsIt() {
+        val existing = lines("alpha line one", "bravo line two", "retrying connection")
+        val incoming = lines("bravo line two", "retrying connection", "retrying connection", "bravo lime twa")
+        val first = FrameMerger.merge(existing, incoming, requireOverlap = true)
+        // The exact repeat is appended at once; the misread look-alike is held back.
+        assertEquals(existing + lines("retrying connection"), first.lines)
+        assertEquals(listOf(LineNormalizer.normalize("bravo lime twa")), first.held)
+
+        val second = FrameMerger.merge(first.lines, incoming, requireOverlap = true, confirmed = first.held.toSet())
+        assertEquals(existing + lines("retrying connection", "bravo lime twa"), second.lines)
+        assertTrue(second.held.isEmpty())
+    }
+
+    @Test
     fun fragmentsCutAtTheFrameEdgeMatchTheirFullLine() {
         val existing = lines(
             "Qwen3.8 모델 카드의 생각 모드 권장값은 temperature 1.0, top_p 0.95",
