@@ -98,6 +98,48 @@ class FrameMergerTest {
     }
 
     @Test
+    fun noisyRereadOfTheSameScreenAddsNothing() {
+        val existing = lines(
+            "전역 설정 kilo.jsonc 는 그대로 두셔도 됩니다.",
+            "기본값과 같은 항목이라 전역 설정을 잠시 비활성화해도",
+            "아직 정하지 않은 것 두 가지는 그대로입니다.",
+            "새 설치 PC의 기본값은 다음 빌드에 반영하겠습니다.",
+            "Thought for 1s",
+            "Bash Read the result of the earlier session test",
+        )
+        val reread = lines(
+            "전역 설정 kilo.jsonc 는 그대로 두셔도 됩니다.",
+            "기본값과 같은 항목이라 진역 설정을 잠시 비활성화헤도",
+            "아직 정하지 않은 것 두 가지는 그데로입니다.",
+            "새 설치 PC의 기본값은 다음 빌드에 반영하겠습니다.",
+            "Thougbt for 1s",
+            "Bash Read the result of the earlier session test",
+        )
+        assertEquals(existing, merge(existing, reread, requireOverlap = true))
+    }
+
+    @Test
+    fun garbledRereadIsNotAppendedBehindAShortTailMatch() {
+        val existing = lines(
+            "alpha line number one",
+            "bravo line number two",
+            "charlie line number three",
+            "delta line number four",
+            "echo line number five",
+        )
+        val reread = lines(
+            "delta line number four",
+            "echo line number five",
+            "alpba lime numbor one",
+            "bravo lune numbr twa",
+            "charlie lina numder thre",
+        )
+        val result = FrameMerger.merge(existing, reread, requireOverlap = true)
+        assertEquals(existing, result.lines)
+        assertTrue(result is FrameMerger.Result.Unchanged)
+    }
+
+    @Test
     fun upgradesMatchedLinesWithMoreConfidentReading() {
         val existing = listOf(TextLine(4, "va1ue = c0mpute(x)", 0.6f), TextLine(4, "return value", 0.9f))
         val incoming = listOf(TextLine(0, "value = compute(x)", 0.95f), TextLine(0, "return value", 0.9f))

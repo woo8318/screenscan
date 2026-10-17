@@ -6,10 +6,12 @@ package com.woo.screenscan.ocr
  * lines are upgraded when the new frame read them with higher confidence.
  */
 object FrameMerger {
-    private const val MATCH_THRESHOLD_SHORT = 0.9f
-    private const val MATCH_THRESHOLD_LONG = 0.85f
+    private const val MATCH_THRESHOLD_SHORT = 0.85f
+    private const val MATCH_THRESHOLD_LONG = 0.8f
     private const val LONG_LINE_LENGTH = 20
-    private const val MIN_MATCH_RATIO = 0.6f
+    private const val DUPLICATE_THRESHOLD = 0.75f
+    private const val MIN_MATCH_RATIO = 0.5f
+    private const val MAX_DUPLICATE_RATIO = 0.5f
     private const val MIN_MATCHES = 2
     private const val MIN_SINGLE_MATCH_LENGTH = 6
     private const val MIN_MATCHED_LENGTH = 6
@@ -20,10 +22,12 @@ object FrameMerger {
         /** Index into existing where incoming[0] lines up. */
         val start: Int,
         val overlap: Int,
-        val matches: Int,
-        val indentDelta: Int,
+        val comparable: Int,
         val matchedPairs: List<Pair<Int, Int>>,
-    )
+        val indentDelta: Int,
+    ) {
+        val matches: Int get() = matchedPairs.size
+    }
 
     sealed interface Result {
         val lines: List<TextLine>
@@ -49,19 +53,29 @@ object FrameMerger {
         val appended = trimmed.drop(alignment.overlap).map { line ->
             if (line.isBlank) line else line.copy(indent = (line.indent + alignment.indentDelta).coerceAtLeast(0))
         }
+        if (looksDuplicated(existing, appended, trimmed.size)) {
+            return if (upgraded == existing) Result.Unchanged(existing) else Result.Appended(upgraded, 0)
+        }
         val merged = upgraded + appended
         return if (merged == existing) Result.Unchanged(existing) else Result.Appended(merged, appended.size)
     }
 
+    /**
+     * Picks the offset with the most matching lines first, so a noisy re-read of the same
+     * screen (many matches, a few misreads) beats a short tail overlap that happens to be
+     * perfect. Only then is the winner checked for quality.
+     */
     fun findAlignment(existing: List<TextLine>, incoming: List<TextLine>): Alignment? {
         val window = (incoming.size * SEARCH_WINDOW_FACTOR).coerceAtMost(existing.size)
         val base = existing.size - window
         val normExisting = existing.takeLast(window).map { LineNormalizer.normalize(it.body) }
         val normIncoming = incoming.map { LineNormalizer.normalize(it.body) }
 
-        return (0 until window)
+        val best = (0 until window)
             .mapNotNull { offset -> score(existing, incoming, normExisting, normIncoming, offset, base) }
-            .maxWithOrNull(compareBy({ it.matches }, { it.matches.toFloat() / it.overlap }))
+            .maxWithOrNull(compareBy({ it.matches }, { it.overlap }))
+            ?: return null
+        return best.takeIf { isTrustworthy(it, normIncoming) }
     }
 
     private fun score(
@@ -77,13 +91,16 @@ object FrameMerger {
         val comparable = pairs.filterNot { (i, j) -> normIncoming[i].isEmpty() && normExisting[j].isEmpty() }
         if (comparable.isEmpty()) return null
         val matched = comparable.filter { (i, j) -> linesMatch(normIncoming[i], normExisting[j]) }
-        val matches = matched.size
-        if (matches.toFloat() / comparable.size < MIN_MATCH_RATIO) return null
-        if (!matchesAreStrong(matched, normIncoming)) return null
+        if (matched.isEmpty()) return null
         val deltas = matched.map { (i, j) -> existing[base + j].indent - incoming[i].indent }.sorted()
-        val indentDelta = if (deltas.isEmpty()) 0 else deltas[deltas.size / 2]
+        val indentDelta = deltas[deltas.size / 2]
         val absolutePairs = matched.map { (i, j) -> i to base + j }
-        return Alignment(base + offset, overlap, matches, indentDelta, absolutePairs)
+        return Alignment(base + offset, overlap, comparable.size, absolutePairs, indentDelta)
+    }
+
+    private fun isTrustworthy(alignment: Alignment, normIncoming: List<String>): Boolean {
+        if (alignment.matches.toFloat() / alignment.comparable < MIN_MATCH_RATIO) return false
+        return matchesAreStrong(alignment.matchedPairs, normIncoming)
     }
 
     private fun linesMatch(a: String, b: String): Boolean {
@@ -96,6 +113,23 @@ object FrameMerger {
         val matchedLength = matched.sumOf { (i, _) -> normIncoming[i].length }
         if (matchedLength < MIN_MATCHED_LENGTH) return false
         return matched.size >= MIN_MATCHES || normIncoming[matched.single().first].length >= MIN_SINGLE_MATCH_LENGTH
+    }
+
+    /**
+     * Lines about to be appended that already resemble lines in the captured tail are a
+     * re-read of the same screen with a mis-chosen anchor, not new content.
+     */
+    private fun looksDuplicated(existing: List<TextLine>, appended: List<TextLine>, frameSize: Int): Boolean {
+        val candidates = appended.filterNot { it.isBlank }
+        if (candidates.isEmpty()) return false
+        val tail = existing.takeLast(frameSize * SEARCH_WINDOW_FACTOR)
+            .filterNot { it.isBlank }
+            .map { LineNormalizer.normalize(it.body) }
+        val duplicates = candidates.count { line ->
+            val norm = LineNormalizer.normalize(line.body)
+            norm.length >= MIN_SINGLE_MATCH_LENGTH && tail.any { LineNormalizer.similarity(norm, it) >= DUPLICATE_THRESHOLD }
+        }
+        return duplicates.toFloat() / candidates.size > MAX_DUPLICATE_RATIO
     }
 
     /** Replaces matched existing lines with the incoming reading when it is clearly more confident. */
