@@ -29,6 +29,10 @@ data class TextLine(
     val indent: Int,
     val body: String,
     val confidence: Float = 1f,
+    /** The line ran off the left edge of the frame, so its start and indent are unknown. */
+    val cutLeft: Boolean = false,
+    /** The line ran off the right edge of the frame, so its end is unknown. */
+    val cutRight: Boolean = false,
 ) {
     val text: String get() = " ".repeat(indent) + body
     val isBlank: Boolean get() = body.isBlank()

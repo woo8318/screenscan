@@ -74,12 +74,25 @@ class FrameExtractorTest {
     @Test
     fun usesFrameWideCharWidthForShortAndWideRows() {
         val top = 100f + TestFixtures.PITCH
-        val hangul = OcrWord("한글", 80f, top, 120f, top + TestFixtures.LINE_H)
-        val wideRow = RawLine(listOf(TestFixtures.word("val", 40f, top), hangul), 40f, top, 120f, top + TestFixtures.LINE_H)
-        val tightBrace = RawLine(listOf(OcrWord("}", 40f, 160f, 45f, 180f)), 40f, 160f, 45f, 180f)
+        val hangul = OcrWord("한글", 180f, top, 220f, top + TestFixtures.LINE_H)
+        val wideRow = RawLine(listOf(TestFixtures.word("val", 140f, top), hangul), 140f, top, 220f, top + TestFixtures.LINE_H)
+        val tightBrace = RawLine(listOf(OcrWord("}", 140f, 160f, 145f, 180f)), 140f, 160f, 145f, 180f)
         val raw = listOf(rawLine(0, 0 to "fun main() {"), wideRow, tightBrace)
         val frame = FrameExtractor.extract(raw, width, height)
         assertEquals(listOf("fun main() {", "    val 한글", "    }"), frame.lines.map { it.text })
+    }
+
+    @Test
+    fun linesTouchingTheSideEdgesAreFlaggedAsCut() {
+        val top = 100f
+        val cutLeft = RawLine(listOf(TestFixtures.word("ragment here", 5f, top)), 5f, top, 125f, top + 20f)
+        val cutRight = RawLine(listOf(OcrWord("a very long line that runs off", 140f, top + 30f, 1915f, top + 50f)), 140f, top + 30f, 1915f, top + 50f)
+        val whole = rawLine(2, 4 to "whole line")
+        val frame = FrameExtractor.extract(listOf(cutLeft, cutRight, whole), width, height)
+        assertEquals(listOf(true, false, false), frame.lines.map { it.cutLeft })
+        assertEquals(listOf(false, true, false), frame.lines.map { it.cutRight })
+        // Indent is measured from the leftmost line that is not cut.
+        assertEquals(listOf(0, 0, 0), frame.lines.map { it.indent })
     }
 
     @Test

@@ -16,7 +16,7 @@ object FrameMerger {
     private const val MIN_SINGLE_MATCH_LENGTH = 6
     private const val MIN_MATCHED_LENGTH = 6
     private const val SEARCH_WINDOW_FACTOR = 3
-    private const val UPGRADE_MARGIN = 0.05f
+    private const val MIN_FRAGMENT_LENGTH = 8
 
     data class Alignment(
         /** Index into existing where incoming[0] lines up. */
@@ -51,7 +51,8 @@ object FrameMerger {
 
         val upgraded = upgradeMatched(existing, trimmed, alignment)
         val appended = trimmed.drop(alignment.overlap).map { line ->
-            if (line.isBlank) line else line.copy(indent = (line.indent + alignment.indentDelta).coerceAtLeast(0))
+            if (line.isBlank || line.cutLeft) line
+            else line.copy(indent = (line.indent + alignment.indentDelta).coerceAtLeast(0))
         }
         if (looksDuplicated(existing, appended, trimmed.size)) {
             return if (upgraded == existing) Result.Unchanged(existing) else Result.Appended(upgraded, 0)
@@ -92,8 +93,11 @@ object FrameMerger {
         if (comparable.isEmpty()) return null
         val matched = comparable.filter { (i, j) -> linesMatch(normIncoming[i], normExisting[j]) }
         if (matched.isEmpty()) return null
-        val deltas = matched.map { (i, j) -> existing[base + j].indent - incoming[i].indent }.sorted()
-        val indentDelta = deltas[deltas.size / 2]
+        val deltas = matched
+            .filterNot { (i, j) -> incoming[i].cutLeft || existing[base + j].cutLeft }
+            .map { (i, j) -> existing[base + j].indent - incoming[i].indent }
+            .sorted()
+        val indentDelta = if (deltas.isEmpty()) 0 else deltas[deltas.size / 2]
         val absolutePairs = matched.map { (i, j) -> i to base + j }
         return Alignment(base + offset, overlap, comparable.size, absolutePairs, indentDelta)
     }
@@ -105,7 +109,12 @@ object FrameMerger {
 
     private fun linesMatch(a: String, b: String): Boolean {
         val threshold = if (maxOf(a.length, b.length) >= LONG_LINE_LENGTH) MATCH_THRESHOLD_LONG else MATCH_THRESHOLD_SHORT
-        return LineNormalizer.similarity(a, b) >= threshold
+        if (LineNormalizer.similarity(a, b) >= threshold) return true
+        // A fragment cut at the frame edge still identifies the line it came from, either
+        // because it sits inside the other reading or because the two readings overlap at the cut.
+        if (minOf(a.length, b.length) < MIN_FRAGMENT_LENGTH) return false
+        return LineNormalizer.containmentSimilarity(a, b) >= MATCH_THRESHOLD_SHORT ||
+            LineNormalizer.edgeOverlap(a, b) >= MIN_FRAGMENT_LENGTH
     }
 
     /** Generic one-character lines such as braces must not anchor an alignment on their own. */
@@ -127,16 +136,19 @@ object FrameMerger {
             .map { LineNormalizer.normalize(it.body) }
         val duplicates = candidates.count { line ->
             val norm = LineNormalizer.normalize(line.body)
-            norm.length >= MIN_SINGLE_MATCH_LENGTH && tail.any { LineNormalizer.similarity(norm, it) >= DUPLICATE_THRESHOLD }
+            norm.length >= MIN_SINGLE_MATCH_LENGTH && tail.any { known ->
+                LineNormalizer.similarity(norm, known) >= DUPLICATE_THRESHOLD ||
+                    (norm.length >= MIN_FRAGMENT_LENGTH && LineNormalizer.containmentSimilarity(norm, known) >= MATCH_THRESHOLD_SHORT)
+            }
         }
         return duplicates.toFloat() / candidates.size > MAX_DUPLICATE_RATIO
     }
 
-    /** Replaces matched existing lines with the incoming reading when it is clearly more confident. */
+    /** Improves matched existing lines with the incoming reading (longer, stitched or more confident). */
     private fun upgradeMatched(existing: List<TextLine>, incoming: List<TextLine>, alignment: Alignment): List<TextLine> {
         val better = alignment.matchedPairs
-            .filter { (i, j) -> incoming[i].confidence > existing[j].confidence + UPGRADE_MARGIN }
-            .associate { (i, j) -> j to incoming[i].copy(indent = existing[j].indent) }
+            .associate { (i, j) -> j to LineReconciler.reconcile(existing[j], incoming[i]) }
+            .filter { (j, line) -> line != existing[j] }
         if (better.isEmpty()) return existing
         return existing.mapIndexed { index, line -> better[index] ?: line }
     }

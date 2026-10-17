@@ -140,6 +140,37 @@ class FrameMergerTest {
     }
 
     @Test
+    fun fragmentsCutAtTheFrameEdgeMatchTheirFullLine() {
+        val existing = lines(
+            "Qwen3.8 모델 카드의 생각 모드 권장값은 temperature 1.0, top_p 0.95",
+            "전역 설정은 0.6입니다",
+        )
+        val incoming = listOf(
+            TextLine(0, "모델 카드의 생각 모드 권장값은 tempera", cutLeft = true, cutRight = true),
+            TextLine(0, "설정은 0.6입니다", cutLeft = true),
+            TextLine(0, "다음 줄입니다 새로운 내용"),
+        )
+        val merged = merge(existing, incoming, requireOverlap = true)
+        assertEquals(existing + lines("다음 줄입니다 새로운 내용"), merged)
+    }
+
+    @Test
+    fun stitchesLeftAndRightHalvesOfACutLine() {
+        val existing = listOf(TextLine(2, "Qwen3.8 모델 카드의 생각 모드 권장값은 temperature", cutRight = true))
+        val incoming = listOf(TextLine(0, "권장값은 temperature 1.0, top_p 0.95, top_k 20이고", cutLeft = true))
+        val merged = merge(existing, incoming, requireOverlap = true)
+        val expected = TextLine(2, "Qwen3.8 모델 카드의 생각 모드 권장값은 temperature 1.0, top_p 0.95, top_k 20이고")
+        assertEquals(listOf(expected), merged)
+    }
+
+    @Test
+    fun longerReadingReplacesAFragment() {
+        val existing = listOf(TextLine(4, "설정은 0.6입니다", cutLeft = true))
+        val incoming = listOf(TextLine(0, "전역 설정은 0.6입니다"))
+        assertEquals(listOf(TextLine(4, "전역 설정은 0.6입니다")), merge(existing, incoming, requireOverlap = true))
+    }
+
+    @Test
     fun upgradesMatchedLinesWithMoreConfidentReading() {
         val existing = listOf(TextLine(4, "va1ue = c0mpute(x)", 0.6f), TextLine(4, "return value", 0.9f))
         val incoming = listOf(TextLine(0, "value = compute(x)", 0.95f), TextLine(0, "return value", 0.9f))

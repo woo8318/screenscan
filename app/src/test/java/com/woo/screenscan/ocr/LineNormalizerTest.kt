@@ -27,6 +27,20 @@ class LineNormalizerTest {
     }
 
     @Test
+    fun containmentFindsFragmentsInsideLongerLines() {
+        assertEquals(1f, LineNormalizer.containmentSimilarity("abcdef", "xxabcdefyy"))
+        assertEquals(1, LineNormalizer.semiGlobalDistance("abcdef", "xxabXdefyy"))
+        assertTrue(LineNormalizer.containmentSimilarity("abcdef", "zzzzzzzzzz") < 0.5f)
+    }
+
+    @Test
+    fun edgeOverlapIgnoresGarbledCutCharacters() {
+        assertEquals(8, LineNormalizer.edgeOverlap("startabcdefgh", "abcdefghend"))
+        assertEquals(8, LineNormalizer.edgeOverlap("startabcdefghX", "YabcdefghEnd"))
+        assertEquals(0, LineNormalizer.edgeOverlap("abcdefgh", "abcdefgh"))
+    }
+
+    @Test
     fun levenshteinStopsAtLimit() {
         assertEquals(3, LineNormalizer.levenshtein("kitten", "sitting", 10))
         assertEquals(2, LineNormalizer.levenshtein("kitten", "sitting", 1))

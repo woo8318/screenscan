@@ -9,6 +9,7 @@ import kotlin.math.roundToInt
  */
 object FrameExtractor {
     private const val EDGE_MARGIN_RATIO = 0.015f
+    private const val SIDE_MARGIN_RATIO = 0.02f
     private const val ROW_TOLERANCE_RATIO = 0.5f
     private const val MIN_GAP_RATIO = 0.25f
     private const val MAX_SPACES = 120
@@ -60,11 +61,15 @@ object FrameExtractor {
         val cleaned = if (options.stripLineNumbers) stripLineNumbers(rowWords) else rowWords
         val rows = cleaned.zip(rowConfidence).filter { it.first.isNotEmpty() }.map { (words, conf) -> buildRow(words, conf) }
         val frameCharWidth = frameCharWidth(rows)
-        val leftMargin = rows.minOfOrNull { it.left } ?: 0f
+        val leftEdge = imageWidth * SIDE_MARGIN_RATIO
+        val rightEdge = imageWidth * (1f - SIDE_MARGIN_RATIO)
+        val leftMargin = rows.filter { it.left > leftEdge }.minOfOrNull { it.left } ?: 0f
         val lines = withBlankLines(rows) { row ->
             val charWidth = if (row.cells >= MIN_CELLS_FOR_OWN_WIDTH) row.ownCharWidth ?: frameCharWidth else frameCharWidth
-            val indent = ((row.left - leftMargin) / charWidth).roundToInt().coerceIn(0, MAX_SPACES)
-            TextLine(indent, rowBody(row.words, charWidth), row.confidence)
+            val cutLeft = row.left <= leftEdge
+            val cutRight = row.right >= rightEdge
+            val indent = if (cutLeft) 0 else ((row.left - leftMargin) / charWidth).roundToInt().coerceIn(0, MAX_SPACES)
+            TextLine(indent, rowBody(row.words, charWidth), row.confidence, cutLeft, cutRight)
         }
         val boxes = rows.map { LineBox(it.left, it.top, it.right, it.bottom) }
         return Frame(lines, boxes, imageWidth, imageHeight, quality)

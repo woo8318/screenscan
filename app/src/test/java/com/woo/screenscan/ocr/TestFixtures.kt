@@ -5,13 +5,16 @@ object TestFixtures {
     const val LINE_H = 20f
     const val PITCH = 30f
 
+    /** Column 0 sits well inside the frame so fixture lines never count as cut at the left edge. */
+    const val ORIGIN_X = 100f
+
     fun word(text: String, left: Float, top: Float): OcrWord =
         OcrWord(text, left, top, left + text.length * CHAR_W, top + LINE_H)
 
     /** Builds one raw line from (column, text) tokens placed on a monospace grid. */
     fun rawLine(rowIndex: Int, vararg tokens: Pair<Int, String>): RawLine {
         val top = 100f + rowIndex * PITCH
-        val words = tokens.map { (col, text) -> word(text, col * CHAR_W, top) }
+        val words = tokens.map { (col, text) -> word(text, ORIGIN_X + col * CHAR_W, top) }
         return RawLine(words, words.minOf { it.left }, top, words.maxOf { it.right }, top + LINE_H)
     }
 
