@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private val updateViewModel: UpdateViewModel by viewModels()
     private var updateMessage: String? = null
     private var feedbackText: String? = null
+    private var lastQuality = 0f
 
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startCamera() else toast(R.string.camera_permission_denied)
@@ -98,17 +99,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bindButtons() = with(binding) {
-        autoSwitch.setOnCheckedChangeListener { _, checked ->
-            viewModel.updateSettings { it.copy(autoMode = checked) }
+        scanButton.setOnClickListener { toggleScanning() }
+        captureButton.setOnClickListener {
+            commitEditsIfStopped()
+            viewModel.captureNow()
         }
-        captureButton.setOnClickListener { viewModel.captureNow() }
-        pauseButton.setOnClickListener { togglePause() }
         undoButton.setOnClickListener {
-            commitEditsIfPaused()
+            commitEditsIfStopped()
             viewModel.undo()
         }
         clearButton.setOnClickListener {
-            commitEditsIfPaused()
+            commitEditsIfStopped()
             viewModel.clear()
         }
         copyButton.setOnClickListener {
@@ -155,14 +156,17 @@ class MainActivity : AppCompatActivity() {
             updateStatus()
         }
         viewModel.settings.observe(this) { settings ->
-            binding.pauseButton.setText(if (settings.paused) R.string.resume else R.string.pause)
-            binding.captureButton.isEnabled = !settings.paused
-            binding.output.isFocusable = settings.paused
-            binding.output.isFocusableInTouchMode = settings.paused
+            binding.scanButton.setText(if (settings.scanning) R.string.scan_stop else R.string.scan_start)
+            binding.output.isFocusable = !settings.scanning
+            binding.output.isFocusableInTouchMode = !settings.scanning
             updateStatus()
             invalidateOptionsMenu()
         }
-        viewModel.lastFrame.observe(this) { frame -> binding.overlay.update(frame) }
+        viewModel.lastFrame.observe(this) { frame ->
+            binding.overlay.update(frame)
+            lastQuality = frame.quality.confidence
+            updateStatus()
+        }
         viewModel.feedback.observe(this) { feedback ->
             feedbackText = describe(feedback)
             updateStatus()
@@ -176,7 +180,7 @@ class MainActivity : AppCompatActivity() {
         MainViewModel.Feedback.NoOverlap -> getString(R.string.feedback_no_overlap)
         MainViewModel.Feedback.Unchanged -> getString(R.string.feedback_unchanged)
         is MainViewModel.Feedback.Rejected -> when (feedback.verdict) {
-            FrameVerdict.BLURRY -> getString(R.string.feedback_blurry, feedback.confidence)
+            FrameVerdict.BLURRY -> getString(R.string.feedback_blurry)
             FrameVerdict.TILTED -> getString(R.string.feedback_tilted, viewModel.lastFrame.value?.quality?.angle ?: 0f)
             FrameVerdict.EMPTY -> getString(R.string.feedback_empty)
             FrameVerdict.OK -> ""
@@ -191,22 +195,21 @@ class MainActivity : AppCompatActivity() {
         }
         val settings = viewModel.currentSettings
         val lineCount = viewModel.state.value?.lines?.size ?: 0
-        val mode = getString(if (settings.autoMode) R.string.status_auto else R.string.status_manual)
-        val running = getString(if (settings.paused) R.string.status_paused else R.string.status_running)
+        val mode = getString(if (settings.scanning) R.string.status_scanning else R.string.status_stopped)
         val version = UpdatePrompter.installedVersion(this)
-        val base = getString(R.string.status_format, lineCount, mode, running, version)
+        val base = getString(R.string.status_format, lineCount, mode, lastQuality, version)
         val feedback = feedbackText
         binding.status.text = if (feedback.isNullOrEmpty()) base else "$base · $feedback"
     }
 
-    private fun togglePause() {
-        commitEditsIfPaused()
-        viewModel.updateSettings { it.copy(paused = !it.paused) }
+    private fun toggleScanning() {
+        commitEditsIfStopped()
+        viewModel.updateSettings { it.copy(scanning = !it.scanning) }
     }
 
-    /** Edits are only possible while paused; push them into the model before anything else changes it. */
-    private fun commitEditsIfPaused() {
-        if (viewModel.currentSettings.paused) viewModel.replaceText(outputText())
+    /** Edits are only possible while stopped; push them into the model before anything else changes it. */
+    private fun commitEditsIfStopped() {
+        if (!viewModel.currentSettings.scanning) viewModel.replaceText(outputText())
     }
 
     private fun toggleLanguage(): Boolean = toggleSetting { settings ->

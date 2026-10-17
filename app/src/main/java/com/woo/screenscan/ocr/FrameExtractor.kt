@@ -17,8 +17,8 @@ object FrameExtractor {
     private const val LINE_NUMBER_ROW_RATIO = 0.6f
     private const val MIN_CELLS_FOR_FRAME_WIDTH = 4
     private const val MIN_CELLS_FOR_OWN_WIDTH = 8
-    private const val MIN_LINE_CONFIDENCE = 0.5f
-    private const val MIN_FRAME_CONFIDENCE = 0.6f
+    private const val MIN_LINE_CONFIDENCE = 0.45f
+    private const val MIN_FRAME_CONFIDENCE = 0.5f
     private const val MAX_TILT_DEGREES = 12f
     private val lineNumberPattern = Regex("^\\d{1,6}$")
 

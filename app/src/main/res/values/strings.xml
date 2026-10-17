@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ScreenScan</string>
-    <string name="auto_mode">자동</string>
+    <string name="scan_start">스캔 시작</string>
+    <string name="scan_stop">스캔 정지</string>
     <string name="capture">캡처</string>
-    <string name="pause">일시정지</string>
-    <string name="resume">재개</string>
     <string name="undo">실행취소</string>
     <string name="copy">복사</string>
     <string name="clear">지우기</string>
@@ -12,12 +11,14 @@
     <string name="save_file">파일로 저장</string>
     <string name="engine_korean">한국어 엔진</string>
     <string name="strip_line_numbers">줄번호 제거</string>
-    <string name="output_hint">카메라를 화면에 비추고 스크롤하면 새 줄이 여기에 쌓입니다.</string>
-    <string name="status_format">%1$d줄 · %2$s · %3$s · v%4$s</string>
+    <string name="output_hint">스캔 중에는 카메라에 보이는 글자가 여기에 쌓입니다. 정지하면 직접 고칠 수 있습니다.</string>
+    <string name="status_format">%1$d줄 · %2$s · 품질 %3$.2f · v%4$s</string>
+    <string name="status_scanning">스캔 중</string>
+    <string name="status_stopped">정지</string>
     <string name="feedback_added">%1$d줄 추가</string>
-    <string name="feedback_no_overlap">겹치는 줄 없음, 조금만 움직이세요</string>
+    <string name="feedback_no_overlap">겹치는 줄 없음</string>
     <string name="feedback_unchanged">새 줄 없음</string>
-    <string name="feedback_blurry">흐림 (품질 %1$.2f)</string>
+    <string name="feedback_blurry">흐림</string>
     <string name="feedback_tilted">기울어짐 (%1$.0f°)</string>
     <string name="feedback_empty">글자 없음</string>
     <string name="check_update">업데이트 확인</string>
@@ -28,10 +29,6 @@
     <string name="update_downloading">업데이트 다운로드 중 %1$d%%</string>
     <string name="update_failed">업데이트 확인 또는 다운로드에 실패했습니다</string>
     <string name="update_up_to_date">최신 버전입니다</string>
-    <string name="status_auto">자동</string>
-    <string name="status_manual">수동</string>
-    <string name="status_paused">일시정지</string>
-    <string name="status_running">인식 중</string>
     <string name="copied">클립보드에 복사했습니다</string>
     <string name="saved">파일로 저장했습니다</string>
     <string name="save_failed">파일 저장에 실패했습니다</string>

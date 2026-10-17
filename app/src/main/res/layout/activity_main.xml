@@ -56,28 +56,20 @@
             android:orientation="horizontal"
             android:paddingHorizontal="8dp">
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/auto_switch"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/scan_button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:checked="true"
-                android:text="@string/auto_mode" />
+                android:minWidth="120dp"
+                android:text="@string/scan_stop" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/capture_button"
                 style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
                 android:text="@string/capture" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/pause_button"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="@string/pause" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/undo_button"
@@ -89,6 +81,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/copy_button"
+                style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"

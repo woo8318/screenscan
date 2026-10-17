@@ -23,8 +23,8 @@ import kotlinx.coroutines.withContext
 class MainViewModel : ViewModel() {
 
     data class Settings(
-        val autoMode: Boolean = true,
-        val paused: Boolean = false,
+        /** Hands-free mode: every usable frame is merged. Off means the text can be edited. */
+        val scanning: Boolean = true,
         val language: OcrLanguage = OcrLanguage.KOREAN,
         val stripLineNumbers: Boolean = false,
     )
@@ -59,8 +59,13 @@ class MainViewModel : ViewModel() {
     @Volatile
     private var latestFrame: Frame? = null
 
+    /** Scene already merged; identical frames are skipped. */
     @Volatile
     private var lastMergedKey: List<String>? = null
+
+    /** Scene that did not overlap; seen twice in a row it is appended as genuinely new content. */
+    @Volatile
+    private var noOverlapKey: List<String>? = null
 
     val currentSettings: Settings get() = _settings.value ?: Settings()
     val extractOptions: ExtractOptions get() = ExtractOptions(currentSettings.stripLineNumbers)
@@ -69,8 +74,7 @@ class MainViewModel : ViewModel() {
     fun onFrame(frame: Frame) {
         latestFrame = frame
         _lastFrame.postValue(frame)
-        val settings = currentSettings
-        if (!settings.autoMode || settings.paused) return
+        if (!currentSettings.scanning) return
 
         if (!frame.quality.accepted) {
             _feedback.postValue(Feedback.Rejected(frame.quality.verdict, frame.quality.confidence))
@@ -78,13 +82,12 @@ class MainViewModel : ViewModel() {
         }
         val key = FrameStability.key(frame)
         if (key.isEmpty() || FrameStability.isSame(lastMergedKey, key)) return
-        lastMergedKey = key
-        mergeFrame(frame, requireOverlap = true)
+        mergeAutomatically(frame, key)
     }
 
     /** Manual capture always appends, even when nothing overlaps. */
     fun captureNow() {
-        latestFrame?.let { mergeFrame(it, requireOverlap = false) }
+        latestFrame?.let { frame -> mergeFrame(frame, requireOverlap = false) }
     }
 
     /** Undo must not be re-applied by the still-visible scene, so the scene stays "handled". */
@@ -98,18 +101,44 @@ class MainViewModel : ViewModel() {
         _settings.value = transform(currentSettings)
     }
 
+    private fun mergeAutomatically(frame: Frame, key: List<String>) {
+        viewModelScope.launch {
+            stateLock.withLock {
+                val current = _state.value ?: AccumulatorState()
+                val first = withContext(Dispatchers.Default) { current.merge(frame.lines, requireOverlap = true) }
+                val seenTwice = FrameStability.isSame(noOverlapKey, key)
+                val merged = if (first.result is FrameMerger.Result.NoOverlap && seenTwice) {
+                    withContext(Dispatchers.Default) { current.merge(frame.lines, requireOverlap = false) }
+                } else {
+                    first
+                }
+                if (merged.result is FrameMerger.Result.NoOverlap) {
+                    noOverlapKey = key
+                } else {
+                    noOverlapKey = null
+                    lastMergedKey = key
+                }
+                publish(current, merged)
+            }
+        }
+    }
+
     private fun mergeFrame(frame: Frame, requireOverlap: Boolean) {
         viewModelScope.launch {
             stateLock.withLock {
                 val current = _state.value ?: AccumulatorState()
                 val merged = withContext(Dispatchers.Default) { current.merge(frame.lines, requireOverlap) }
-                if (merged.state !== current) _state.value = merged.state
-                _feedback.value = when (val result = merged.result) {
-                    is FrameMerger.Result.Appended -> Feedback.Added(result.added)
-                    is FrameMerger.Result.NoOverlap -> Feedback.NoOverlap
-                    is FrameMerger.Result.Unchanged -> Feedback.Unchanged
-                }
+                publish(current, merged)
             }
+        }
+    }
+
+    private fun publish(current: AccumulatorState, merged: AccumulatorState.Merged) {
+        if (merged.state !== current) _state.value = merged.state
+        _feedback.value = when (val result = merged.result) {
+            is FrameMerger.Result.Appended -> Feedback.Added(result.added)
+            is FrameMerger.Result.NoOverlap -> Feedback.NoOverlap
+            is FrameMerger.Result.Unchanged -> Feedback.Unchanged
         }
     }
 
@@ -119,6 +148,7 @@ class MainViewModel : ViewModel() {
                 val current = _state.value ?: AccumulatorState()
                 val next = transform(current)
                 lastMergedKey = if (rearm) null else latestFrame?.let(FrameStability::key)
+                noOverlapKey = null
                 if (next !== current) _state.value = next
             }
         }
